@@ -1,0 +1,39 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+.eggs/
+
+# Environments
+.venv/
+venv/
+ENV/
+env/
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Generated reports & dashboards during local runs
+*.html
+*.json
+!examples/**/*.rpt
+!examples/**/*.summary
+!examples/**/*.drc
+!examples/**/*.sdc
+
+# Coverage & test reports
+.coverage
+htmlcov/
+.pytest_cache/

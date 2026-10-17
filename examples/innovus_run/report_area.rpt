@@ -1,0 +1,15 @@
+###############################################################
+#  Cadence Design Systems, Inc. - Innovus report_area & report_power
+#  Design: gpu_shader_tile
+###############################################################
+
+Total Area: 342150.00
+Core Area: 285400.00
+Density / Utilization: 71.4%
+Standard Cell Count: 45210
+Macro Count: 6
+
+Total Power: 58.75 mW
+Internal Power: 31.20 mW
+Switching Power: 22.45 mW
+Total Leakage Power: 5.10 mW

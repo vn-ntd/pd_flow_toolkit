@@ -1,0 +1,23 @@
+===========================================================================
+ TritonRoute Detailed Route DRC Report
+ OpenROAD Flow
+ Design: riscv_core
+===========================================================================
+[INFO DRT-0199] Total violations: 7
+
+violation type: Short, layer: Metal2
+  src: net_1044 / net_1082 (124.50, 89.20)
+violation type: Short, layer: Metal2
+  src: net_2011 / net_2015 (140.10, 92.50)
+violation type: MinSpacing, layer: Metal1
+  src: net_840 / net_841 (55.40, 60.10)
+violation type: MinSpacing, layer: Metal1
+  src: net_902 / net_905 (62.30, 71.00)
+violation type: MinSpacing, layer: Metal3
+  src: clk_net / net_330 (180.20, 110.50)
+violation type: MinArea, layer: Metal2
+  src: net_512 (90.10, 45.30)
+violation type: ViaSpacing, layer: Via1
+  src: via1_120 / via1_121 (112.40, 88.00)
+
+[INFO DRT-0200] Detailed route finished with 7 DRC violations.

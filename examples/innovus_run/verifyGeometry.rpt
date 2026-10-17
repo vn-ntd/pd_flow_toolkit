@@ -1,0 +1,16 @@
+###############################################################
+#  Cadence Design Systems, Inc. - Innovus verifyGeometry
+#  Design: gpu_shader_tile
+###############################################################
+
+Total Violations : 4
+Short              : 1
+Spacing            : 2
+MinWidth           : 1
+
+VIOLATION: Metal3 Short at (320.40, 150.20)
+VIOLATION: Metal2 Spacing ( min 0.12  actual 0.10 ) at (110.15, 88.40)
+VIOLATION: Metal2 Spacing ( min 0.12  actual 0.11 ) at (114.20, 92.00)
+VIOLATION: Metal1 MinWidth ( min 0.08  actual 0.07 ) at (45.30, 12.00)
+
+Verification complete: 4 violations reported.

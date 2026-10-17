@@ -1,0 +1,11 @@
+###############################################################
+#  Cadence Design Systems, Inc. - Innovus reportCongestion
+#  Design: gpu_shader_tile
+###############################################################
+
+Max H Congestion: 76.5%
+Max V Congestion: 81.2%
+Total 2D Overflow: 0
+Hotspot Count: 0
+
+Congestion analysis clean. No routing overflow bins detected.

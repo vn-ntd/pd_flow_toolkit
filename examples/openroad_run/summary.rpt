@@ -1,0 +1,13 @@
+===========================================================================
+ OpenROAD Design Area and Power Summary
+ Design: riscv_core
+ Stage: Signoff
+===========================================================================
+Design area 185420.50 u^2 64.2% utilization.
+Std cell count: 18450
+Macro count: 2
+
+Total Power: 34.82 mW
+Internal Power: 18.25 mW
+Switching Power: 14.12 mW
+Leakage Power: 2.45 mW

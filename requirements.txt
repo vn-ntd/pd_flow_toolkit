@@ -1,0 +1,4 @@
+# PD Flow Toolkit dependencies
+# Standard library only (Python 3.10+)
+# Optional enhancements:
+# rich>=13.0.0

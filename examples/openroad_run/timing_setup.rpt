@@ -1,0 +1,35 @@
+===========================================================================
+ report_checks -path_delay max (Setup Timing Analysis)
+ OpenSTA / OpenROAD Flow
+ Design: riscv_core
+===========================================================================
+
+Path 1: VIOLATED
+Endpoint: u_alu/alu_result_reg[31]/D (rising edge-triggered flip-flop clocked by core_clk)
+Path Group: core_clk
+Path Type: max
+
+  Delay    Time   Description
+---------------------------------------------------------
+   0.00    0.00   clock core_clk (rise edge)
+   0.00    0.00   clock source latency
+   0.24    0.24 ^ clk_pad/Y (CLKBUF_X4)
+   0.11    0.35 ^ u_regfile/rdata1_reg[0]/CLK (DFF_X1)
+   0.42    0.77 ^ u_alu/mult_inst/mult_tree_node_42/Y (NAND2_X1)
+   0.85    1.62 v u_alu/alu_result_reg[31]/D (DFF_X1)
+---------------------------------------------------------
+           1.62   data arrival time
+
+   2.00    2.00   clock core_clk (rise edge)
+  -0.10    1.90   clock uncertainty
+  -0.05    1.85   library setup time
+---------------------------------------------------------
+           1.48   data required time
+---------------------------------------------------------
+          -0.14   slack (VIOLATED)
+
+[INFO] Worst slack: -0.140 ns
+[INFO] Total negative slack: -4.320 ns
+[INFO] Number of failing endpoints: 18
+[INFO] Max slew violations: 2
+[INFO] Max capacitance violations: 0

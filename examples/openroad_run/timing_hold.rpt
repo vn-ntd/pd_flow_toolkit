@@ -1,0 +1,30 @@
+===========================================================================
+ report_checks -path_delay min (Hold Timing Analysis)
+ OpenSTA / OpenROAD Flow
+ Design: riscv_core
+===========================================================================
+
+Path 1: MET
+Endpoint: u_csr/mstatus_reg[3]/D (rising edge-triggered flip-flop clocked by core_clk)
+Path Group: core_clk
+Path Type: min
+
+  Delay    Time   Description
+---------------------------------------------------------
+   0.00    0.00   clock core_clk (rise edge)
+   0.15    0.15 ^ u_csr/ctrl_reg/Q
+   0.12    0.27 ^ u_csr/mstatus_reg[3]/D
+---------------------------------------------------------
+           0.27   data arrival time
+
+   0.00    0.00   clock core_clk (rise edge)
+   0.05    0.05   clock uncertainty
+   0.10    0.15   library hold time
+---------------------------------------------------------
+           0.15   data required time
+---------------------------------------------------------
+           0.12   slack (MET)
+
+[INFO] Worst hold slack: +0.035 ns
+[INFO] Total hold negative slack: 0.000 ns
+[INFO] Number of hold failing endpoints: 0

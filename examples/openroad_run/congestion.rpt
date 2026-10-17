@@ -1,0 +1,12 @@
+===========================================================================
+ FastRoute Global Routing Congestion Report
+ OpenROAD Flow
+ Design: riscv_core
+===========================================================================
+[INFO GRT-0096] Final congestion report:
+[INFO GRT-0097]   Horizontal max congestion: 84.50%
+[INFO GRT-0098]   Vertical max congestion: 89.20%
+[INFO GRT-0099]   Horizontal overflow: 0
+[INFO GRT-0100]   Vertical overflow: 0
+[INFO GRT-0101]   Max congestion: 89.20%
+[INFO GRT-0102]   Congested GCells count: 0

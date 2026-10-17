@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pd-flow-toolkit"
+version = "1.0.0"
+description = "ASIC/SoC Physical Design Automation Suite: EDA Report Parser, Signoff HTML Dashboard, and SDC Linter."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+    { name = "Antigravity PD Automation Team" }
+]
+keywords = [
+    "eda",
+    "physical-design",
+    "vlsi",
+    "asic",
+    "openroad",
+    "innovus",
+    "sdc",
+    "timing",
+    "drc",
+    "automation"
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Electronic Design Automation (EDA)",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "unittest-xml-reporting",
+    "flake8",
+]
+
+[project.scripts]
+pd-toolkit = "pd_toolkit.cli:main"
+pd-flow = "pd_toolkit.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["pd_toolkit*"]
