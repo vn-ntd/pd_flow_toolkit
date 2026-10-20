@@ -12,7 +12,7 @@ Trong quy trình thiết kế vi mạch VLSI/ASIC Physical Design (PD), kỹ sư
 2. **Thu thập, đọc thủ công hàng chục file báo cáo (`.rpt`, `.summary`, `.drc`, `.log`)** sau mỗi vòng lặp P&R (OpenROAD hoặc Cadence Innovus) để kiểm tra Timing Slack (WNS/TNS), DRC violations, Congestion hotspots, Area và Power.
 3. **So sánh regression giữa các lần chạy (Run A vs Run B)** sau các bước ECO để đánh giá cải thiện hay suy giảm (timing/DRC regression).
 
-**PD Flow Toolkit** cung cấp một giải pháp tự động hóa toàn diện, hiệu năng cao, viết bằng Python 3 chuẩn (không phụ thuộc external library nặng nề, hoàn toàn tương thích môi trường server EDA nội bộ).
+**PD Flow Toolkit** cung cấp một giải pháp tự động hóa toàn diện, hiệu năng cao, viết bằng Python 3 chuẩn (sử dụng thư viện tiêu chuẩn của Python kết hợp thư viện gọn nhẹ `rich` để render CLI terminal trực quan, không phụ thuộc framework web cồng kềnh, hoàn toàn tương thích môi trường server EDA nội bộ).
 
 ---
 
@@ -79,7 +79,8 @@ pd_toolkit/
 │   └── comparator/                 # Engine so sánh regression
 │       ├── __init__.py
 │       └── diff_engine.py          # Tính delta & đánh giá xu hướng chất lượng P&R
-├── examples/                       # Dữ liệu mẫu thực tế
+├── examples/                       # Dữ liệu mẫu & kết quả thực tế
+│   ├── picorv32_dashboard.html     # Real dashboard trích xuất từ repo RISC-V PicoRV32 (SkyWater 130nm)
 │   ├── openroad_run/               # Mock reports OpenROAD (timing, DRC, congestion, area)
 │   ├── innovus_run/                # Mock reports Cadence Innovus
 │   └── sdc/

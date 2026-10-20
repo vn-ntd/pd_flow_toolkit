@@ -36,10 +36,13 @@ class OpenROADParser(BaseReportParser):
 
         for filepath in files_to_parse:
             try:
+                if filepath.name.lower() == "metrics.csv":
+                    self._parse_metrics_csv(filepath, metrics)
+                    continue
                 with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
                     content = f.read()
                     self._parse_timing(content, metrics.timing)
-                    self._parse_drc(content, metrics.drc)
+                    self._parse_drc(content, metrics.drc, filepath.name)
                     self._parse_congestion(content, metrics.congestion)
                     self._parse_area_power(content, metrics.area_power)
             except Exception:
@@ -61,7 +64,7 @@ class OpenROADParser(BaseReportParser):
             return [p]
         if p.is_dir():
             candidates = []
-            for ext in ("*.rpt", "*.log", "*.drc", "*.summary", "*.txt"):
+            for ext in ("*.rpt", "*.log", "*.drc", "*.summary", "*.txt", "*.csv"):
                 candidates.extend(p.glob(f"**/{ext}"))
             return sorted(set(candidates))
         return []
@@ -142,18 +145,31 @@ class OpenROADParser(BaseReportParser):
         if skew_matches:
             timing.max_clock_skew = max(timing.max_clock_skew, float(skew_matches[-1]))
 
-    def _parse_drc(self, content: str, drc: DRCSummary):
+    def _parse_drc(self, content: str, drc: DRCSummary, filename: str = ""):
+        # Ignore STA logs and timing reports for DRC parsing to avoid false positives
+        if any(marker in content for marker in ("Startpoint:", "Endpoint:", "Path Group:", "report_checks", "tns 0.00")):
+            return
+
+        # Magic DRC OpenLane format: "[INFO]: COUNT: 0"
+        magic_count = re.search(r"\[INFO\]:\s*COUNT:\s*(\d+)", content, re.IGNORECASE)
+        if magic_count:
+            count = int(magic_count.group(1))
+            drc.total_violations = count
+            if count == 0:
+                drc.violations_details.clear()
+                drc.violations_by_type.clear()
+                drc.violations_by_layer.clear()
+            return
+
         # OpenROAD TritonRoute: "[INFO DRT-0199] Total violations: 24"
         tr_total = re.search(r"Total\s+violations\s*:\s*(\d+)", content, re.IGNORECASE)
         if tr_total:
             drc.total_violations = max(drc.total_violations, int(tr_total.group(1)))
 
-        # TritonRoute violation line format:
+        # TritonRoute violation line format (require explicit 'violation type:'):
         #   violation type: Short, layer: Metal2
-        # or:
-        #   [INFO DRT-...] Metal2 spacing violation
         for m in re.finditer(
-            r"(?:violation\s+type|type)\s*:\s*([A-Za-z0-9_]+)(?:.*layer\s*:\s*([A-Za-z0-9_]+))?",
+            r"violation\s+type\s*:\s*([A-Za-z0-9_]+)(?:.*layer\s*:\s*([A-Za-z0-9_]+))?",
             content,
             re.IGNORECASE,
         ):
@@ -171,6 +187,63 @@ class OpenROADParser(BaseReportParser):
         # If details exist but total_violations is 0, update total
         if drc.total_violations == 0 and drc.violations_details:
             drc.total_violations = len(drc.violations_details)
+
+    def _parse_metrics_csv(self, filepath: Path, metrics: PDRunMetrics):
+        import csv
+        try:
+            with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    # Timing
+                    if "spef_wns" in row and row["spef_wns"] != "-1":
+                        metrics.timing.setup_wns = float(row["spef_wns"])
+                    elif "wns" in row and row["wns"] != "-1":
+                        metrics.timing.setup_wns = float(row["wns"])
+
+                    if "spef_tns" in row and row["spef_tns"] != "-1":
+                        metrics.timing.setup_tns = float(row["spef_tns"])
+                    elif "tns" in row and row["tns"] != "-1":
+                        metrics.timing.setup_tns = float(row["tns"])
+
+                    # DRC
+                    drc_errs = 0
+                    if "tritonRoute_violations" in row and row["tritonRoute_violations"] != "-1":
+                        drc_errs += int(float(row["tritonRoute_violations"]))
+                    if "Magic_violations" in row and row["Magic_violations"] != "-1":
+                        drc_errs += int(float(row["Magic_violations"]))
+                    metrics.drc.total_violations = drc_errs
+                    if drc_errs == 0:
+                        metrics.drc.violations_details.clear()
+                        metrics.drc.violations_by_type.clear()
+                        metrics.drc.violations_by_layer.clear()
+
+                    # Area & Power
+                    if "DIEAREA_mm^2" in row and row["DIEAREA_mm^2"] != "-1":
+                        metrics.area_power.die_area_um2 = float(row["DIEAREA_mm^2"]) * 1e6
+                    if "CoreArea_um^2" in row and row["CoreArea_um^2"] != "-1":
+                        metrics.area_power.core_area_um2 = float(row["CoreArea_um^2"])
+                    if "OpenDP_Util" in row and row["OpenDP_Util"] != "-1":
+                        metrics.area_power.utilization_pct = float(row["OpenDP_Util"])
+                    if "TotalCells" in row and row["TotalCells"] != "-1":
+                        metrics.area_power.std_cell_count = int(float(row["TotalCells"]))
+
+                    # Power
+                    if "power_typical_internal_uW" in row and row["power_typical_internal_uW"] != "-1":
+                        val = float(row["power_typical_internal_uW"])
+                        metrics.area_power.internal_power_mw = val * 1000.0 if val < 1.0 else val / 1000.0
+                    if "power_typical_switching_uW" in row and row["power_typical_switching_uW"] != "-1":
+                        val = float(row["power_typical_switching_uW"])
+                        metrics.area_power.switching_power_mw = val * 1000.0 if val < 1.0 else val / 1000.0
+                    if "power_typical_leakage_uW" in row and row["power_typical_leakage_uW"] != "-1":
+                        val = float(row["power_typical_leakage_uW"])
+                        metrics.area_power.leakage_power_mw = val * 1000.0 if val < 1.0 else val / 1000.0
+                    metrics.area_power.total_power_mw = (
+                        metrics.area_power.internal_power_mw +
+                        metrics.area_power.switching_power_mw +
+                        metrics.area_power.leakage_power_mw
+                    )
+        except Exception:
+            pass
 
     def _parse_congestion(self, content: str, cong: CongestionSummary):
         # OpenROAD FastRoute / Global Route:

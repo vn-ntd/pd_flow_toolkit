@@ -28,6 +28,8 @@ Thumbs.db
 # Generated reports & dashboards during local runs
 *.html
 *.json
+!examples/**/*.html
+!examples/*.html
 !examples/**/*.rpt
 !examples/**/*.summary
 !examples/**/*.drc
