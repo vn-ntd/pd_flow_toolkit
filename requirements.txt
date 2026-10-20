@@ -2,3 +2,9 @@
 # Standard library only (Python 3.10+)
 # Optional enhancements:
 # rich>=13.0.0
+
+# Development & Testing:
+pytest>=7.0.0
+pytest-cov>=4.0.0
+ruff>=0.1.0
+flake8>=6.0.0

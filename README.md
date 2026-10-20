@@ -129,9 +129,17 @@ python pd_tool.py lint-sdc --sdc constraints.sdc --fail-on-warning
 python pd_tool.py compare --baseline examples/openroad_run --current examples/innovus_run
 ```
 
-### 5. Chạy Automated Unit Tests
+### 5. Chạy Automated Unit Tests & Kiểm Tra Độ Bao Phủ Mã Nguồn (Coverage)
 ```bash
+# Chạy với unittest chuẩn:
 python -m unittest discover -s tests -p "test_*.py"
+
+# Chạy với pytest và xuất bảng thống kê độ bao phủ (Coverage >= 85%):
+pytest --cov=pd_toolkit --cov-report=term-missing
+
+# Kiểm tra cú pháp và chất lượng mã nguồn (Linting):
+ruff check .
+flake8 pd_toolkit tests --max-line-length=120 --extend-ignore=E501,W503
 ```
 
 ---

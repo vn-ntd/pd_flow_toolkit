@@ -5,7 +5,7 @@ SDC Linter Execution Engine and Report Formatter.
 from dataclasses import dataclass, field
 from typing import List, Dict, Any
 import json
-from .sdc_parser import SDCParser, SDCCommand
+from .sdc_parser import SDCParser
 from .rules import SDCRulesChecker, RuleViolation
 
 

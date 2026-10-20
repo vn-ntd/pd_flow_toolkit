@@ -6,11 +6,10 @@ import argparse
 import sys
 import os
 from pathlib import Path
-from typing import Optional
 
-from .parsers import parse_reports, PDRunMetrics
+from .parsers import parse_reports
 from .dashboard import generate_html_dashboard
-from .sdc_linter import SDCLinter, SDCLintReport
+from .sdc_linter import SDCLinter
 from .comparator import RunComparator
 
 
@@ -35,10 +34,10 @@ RESET = "\033[0m"
 def print_banner():
     banner = f"""{CYAN}{BOLD}
 ======================================================================
-  ____  ____    _____ _                  _____           _ _    _ _   
- |  _ \\|  _ \\  |  ___| | _____      __  |_   _|__   ___ | | | _(_) |_ 
+  ____  ____    _____ _                  _____           _ _    _ _
+ |  _ \\|  _ \\  |  ___| | _____      __  |_   _|__   ___ | | | _(_) |_
  | |_) | | | | | |_  | |/ _ \\ \\ /\\ / /    | |/ _ \\ / _ \\| | |/ / | __|
- |  __/| |_| | |  _| | | (_) \\ V  V /     | | (_) | (_) | |   <| | |_ 
+ |  __/| |_| | |  _| | | (_) \\ V  V /     | | (_) | (_) | |   <| | |_
  |_|   |____/  |_|   |_|\\___/ \\_/\\_/      |_|\\___/ \\___/|_|_|\\_\\_|\\__|
   ASIC/SoC Physical Design Automation & Quality Signoff Suite
 ======================================================================{RESET}"""
@@ -147,7 +146,13 @@ def cmd_compare(args):
         color = GREEN if delta_obj.improved else RED
         if delta_obj.delta == 0:
             color = RESET
-        print(f"{name:<25} | {delta_obj.baseline:<12.3f} | {delta_obj.current:<12.3f} | {color}{d_str:<12}{RESET}")
+        if delta_obj.is_integer:
+            b_str = f"{int(round(delta_obj.baseline)):<12}"
+            c_str = f"{int(round(delta_obj.current)):<12}"
+        else:
+            b_str = f"{delta_obj.baseline:<12.3f}"
+            c_str = f"{delta_obj.current:<12.3f}"
+        print(f"{name:<25} | {b_str} | {c_str} | {color}{d_str:<12}{RESET}")
 
     print_row("Setup WNS (ns)", diff.setup_wns)
     print_row("Setup TNS (ns)", diff.setup_tns)

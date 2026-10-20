@@ -103,6 +103,24 @@ class BaseReportParser(ABC):
     def __init__(self, directory_or_file: str):
         self.target_path = directory_or_file
 
+    @staticmethod
+    def _normalize_power_mw(val: float, unit: Optional[str]) -> float:
+        """Converts power value to standard milliwatts (mW)."""
+        if not unit:
+            return val
+        u = unit.lower().strip()
+        if u in ("w",):
+            return val * 1000.0
+        elif u in ("mw",):
+            return val
+        elif u in ("uw", "µw"):
+            return val / 1000.0
+        elif u in ("nw",):
+            return val / 1_000_000.0
+        elif u in ("pw",):
+            return val / 1_000_000_000.0
+        return val
+
     @abstractmethod
     def parse(self) -> PDRunMetrics:
         """Parses the reports and returns standardized PDRunMetrics."""

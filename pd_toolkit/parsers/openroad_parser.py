@@ -4,10 +4,9 @@ Extracts Timing (WNS, TNS, FEP), DRC violations, Congestion, and Area/Power
 from OpenROAD / OpenSTA flow outputs.
 """
 
-import os
 import re
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import List, Optional
 from .base_parser import (
     BaseReportParser,
     PDRunMetrics,
@@ -43,7 +42,7 @@ class OpenROADParser(BaseReportParser):
                     self._parse_drc(content, metrics.drc)
                     self._parse_congestion(content, metrics.congestion)
                     self._parse_area_power(content, metrics.area_power)
-            except Exception as e:
+            except Exception:
                 # Silently log or continue reading other files
                 continue
 
@@ -213,6 +212,7 @@ class OpenROADParser(BaseReportParser):
         )
         if area_match:
             ap.core_area_um2 = float(area_match.group(1))
+            ap.die_area_um2 = max(ap.die_area_um2, ap.core_area_um2)
             ap.utilization_pct = float(area_match.group(2))
 
         # Std cell count
@@ -225,13 +225,27 @@ class OpenROADParser(BaseReportParser):
         if macro_cnt:
             ap.macro_count = max(ap.macro_count, int(macro_cnt.group(1)))
 
-        # Power
-        tot_power = re.search(r"Total\s+Power\s*[:=]?\s*([0-9.e+-]+)\s*(?:mW|W|uW)?", content, re.IGNORECASE)
+        # Power parsing with unit normalization
+        tot_power = re.search(r"Total\s+Power\s*[:=]?\s*([0-9.e+-]+)\s*(nW|uW|µW|mW|W)?", content, re.IGNORECASE)
         if tot_power:
             val = float(tot_power.group(1))
-            # standardize to mW if needed
-            ap.total_power_mw = val
+            unit = tot_power.group(2) or "mW"
+            ap.total_power_mw = self._normalize_power_mw(val, unit)
 
-        leakage = re.search(r"Leakage\s+Power\s*[:=]?\s*([0-9.e+-]+)\s*(?:mW|W|uW)?", content, re.IGNORECASE)
+        int_power = re.search(r"Internal\s+Power\s*[:=]?\s*([0-9.e+-]+)\s*(nW|uW|µW|mW|W)?", content, re.IGNORECASE)
+        if int_power:
+            val = float(int_power.group(1))
+            unit = int_power.group(2) or "mW"
+            ap.internal_power_mw = self._normalize_power_mw(val, unit)
+
+        sw_power = re.search(r"Switching\s+Power\s*[:=]?\s*([0-9.e+-]+)\s*(nW|uW|µW|mW|W)?", content, re.IGNORECASE)
+        if sw_power:
+            val = float(sw_power.group(1))
+            unit = sw_power.group(2) or "mW"
+            ap.switching_power_mw = self._normalize_power_mw(val, unit)
+
+        leakage = re.search(r"Leakage\s+Power\s*[:=]?\s*([0-9.e+-]+)\s*(nW|uW|µW|mW|W)?", content, re.IGNORECASE)
         if leakage:
-            ap.leakage_power_mw = float(leakage.group(1))
+            val = float(leakage.group(1))
+            unit = leakage.group(2) or "mW"
+            ap.leakage_power_mw = self._normalize_power_mw(val, unit)

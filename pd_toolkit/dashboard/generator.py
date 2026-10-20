@@ -5,7 +5,6 @@ metrics cards, SVG charts, and detailed violation tables.
 """
 
 from pathlib import Path
-from typing import Optional
 from ..parsers.base_parser import PDRunMetrics
 
 
@@ -14,7 +13,6 @@ def generate_html_dashboard(metrics: PDRunMetrics, output_file: str) -> str:
 
     # Compute status badges and colors
     status = metrics.overall_status
-    status_color = "#10b981" if status == "PASS" else ("#f59e0b" if status == "WARN" else "#ef4444")
     setup_color = "#10b981" if metrics.timing.setup_passed else "#ef4444"
     hold_color = "#10b981" if metrics.timing.hold_passed else "#ef4444"
     drc_color = "#10b981" if metrics.drc.passed else "#ef4444"
@@ -401,6 +399,14 @@ def generate_html_dashboard(metrics: PDRunMetrics, output_file: str) -> str:
                         <tr>
                             <td>Total Power</td>
                             <td>{metrics.area_power.total_power_mw:.2f} mW</td>
+                        </tr>
+                        <tr>
+                            <td>Internal Power</td>
+                            <td>{metrics.area_power.internal_power_mw:.2f} mW</td>
+                        </tr>
+                        <tr>
+                            <td>Switching Power</td>
+                            <td>{metrics.area_power.switching_power_mw:.2f} mW</td>
                         </tr>
                         <tr>
                             <td>Leakage Power</td>

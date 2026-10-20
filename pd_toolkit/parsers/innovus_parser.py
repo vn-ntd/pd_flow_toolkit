@@ -4,10 +4,9 @@ Extracts Timing (timeDesign WNS, TNS, Violating Paths), verifyGeometry (DRC),
 Congestion, and Area/Power metrics from Cadence Innovus flow reports.
 """
 
-import os
 import re
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import List, Optional
 from .base_parser import (
     BaseReportParser,
     PDRunMetrics,
@@ -169,20 +168,52 @@ class InnovusParser(BaseReportParser):
         if tot_area:
             ap.die_area_um2 = float(tot_area.group(1))
 
-        core_area = re.search(r"(?:Core\s+Area|Cell\s+Area)\s*[:=]\s*([0-9.]+)", content, re.IGNORECASE)
+        # Core Area
+        core_area = re.search(r"Core\s+Area\s*[:=]\s*([0-9.]+)", content, re.IGNORECASE)
         if core_area:
-            ap.cell_area_um2 = float(core_area.group(1))
+            ap.core_area_um2 = float(core_area.group(1))
 
-        # Density / Utilization: "Density / Utilization: 74.2%" or "Core Utilization: 68.5%"
-        util = re.search(r"(?:Density|Core\s+Utilization|Utilization)\s*[:=]\s*([0-9.]+)\s*%", content, re.IGNORECASE)
+        # Cell Area
+        cell_area = re.search(r"Cell\s+Area\s*[:=]\s*([0-9.]+)", content, re.IGNORECASE)
+        if cell_area:
+            ap.cell_area_um2 = float(cell_area.group(1))
+
+        # Density / Utilization: "Density / Utilization: 71.4%" or "Core Utilization: 68.5%"
+        util = re.search(r"(?:Density\s*/\s*Utilization|Density|Core\s+Utilization|Utilization)\s*[:=]\s*([0-9.]+)\s*%", content, re.IGNORECASE)
         if util:
             ap.utilization_pct = float(util.group(1))
 
-        # Power
-        tot_pow = re.search(r"(?:Total\s+Power|Total\s+Internal\s+Power)\s*[:=]\s*([0-9.]+)\s*mW", content, re.IGNORECASE)
-        if tot_pow:
-            ap.total_power_mw = float(tot_pow.group(1))
+        # Standard Cell Count: "Standard Cell Count: 45210"
+        std_cell = re.search(r"(?:Standard\s*Cell\s*Count|Std\s*Cell\s*Count|Total\s*Std\s*Cells?)\s*[:=]\s*(\d+)", content, re.IGNORECASE)
+        if std_cell:
+            ap.std_cell_count = max(ap.std_cell_count, int(std_cell.group(1)))
 
-        leak = re.search(r"Total\s+Leakage\s+Power\s*[:=]\s*([0-9.]+)\s*(?:mW|uW)?", content, re.IGNORECASE)
+        # Macro Count: "Macro Count: 6"
+        macros = re.search(r"(?:Macro\s*Count|Number\s+of\s+Macros|Total\s*Macros?)\s*[:=]\s*(\d+)", content, re.IGNORECASE)
+        if macros:
+            ap.macro_count = max(ap.macro_count, int(macros.group(1)))
+
+        # Power parsing with unit normalization
+        tot_pow = re.search(r"(?:Total\s+Power|Total\s+Internal\s+Power)\s*[:=]\s*([0-9.e+-]+)\s*(nW|uW|µW|mW|W)?", content, re.IGNORECASE)
+        if tot_pow:
+            val = float(tot_pow.group(1))
+            unit = tot_pow.group(2) or "mW"
+            ap.total_power_mw = self._normalize_power_mw(val, unit)
+
+        int_pow = re.search(r"Internal\s+Power\s*[:=]\s*([0-9.e+-]+)\s*(nW|uW|µW|mW|W)?", content, re.IGNORECASE)
+        if int_pow:
+            val = float(int_pow.group(1))
+            unit = int_pow.group(2) or "mW"
+            ap.internal_power_mw = self._normalize_power_mw(val, unit)
+
+        sw_pow = re.search(r"Switching\s+Power\s*[:=]\s*([0-9.e+-]+)\s*(nW|uW|µW|mW|W)?", content, re.IGNORECASE)
+        if sw_pow:
+            val = float(sw_pow.group(1))
+            unit = sw_pow.group(2) or "mW"
+            ap.switching_power_mw = self._normalize_power_mw(val, unit)
+
+        leak = re.search(r"(?:Total\s+Leakage\s+Power|Leakage\s+Power)\s*[:=]\s*([0-9.e+-]+)\s*(nW|uW|µW|mW|W)?", content, re.IGNORECASE)
         if leak:
-            ap.leakage_power_mw = float(leak.group(1))
+            val = float(leak.group(1))
+            unit = leak.group(2) or "mW"
+            ap.leakage_power_mw = self._normalize_power_mw(val, unit)

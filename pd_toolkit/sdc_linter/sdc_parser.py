@@ -1,9 +1,8 @@
-"""
+r"""
 SDC (Synopsys Design Constraints) Tokenizer and Command Parser.
 Handles line continuations (\), comments (#), nested brackets, and option parsing.
 """
 
-import re
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Any
 
@@ -17,10 +16,21 @@ class SDCCommand:
     positional_args: List[str] = field(default_factory=list)
 
     def get_flag(self, flag: str) -> bool:
-        return self.options.get(flag) is True
+        val = self.options.get(flag)
+        if isinstance(val, list):
+            return any(v is True for v in val)
+        return val is True
 
     def get_value(self, option: str, default: Any = None) -> Any:
         return self.options.get(option, default)
+
+    def get_list(self, option: str) -> List[Any]:
+        val = self.options.get(option, [])
+        if isinstance(val, list):
+            return val
+        elif val is not None and val != []:
+            return [val]
+        return []
 
 
 class SDCParser:
@@ -110,11 +120,19 @@ class SDCParser:
                 opt_name = tok[1:]
                 # Check if next token is a value or another option
                 if i + 1 < len(tokens) and not (tokens[i + 1].startswith("-") and len(tokens[i + 1]) > 1 and not tokens[i + 1][1:].replace(".", "", 1).isdigit()):
-                    options[opt_name] = tokens[i + 1]
+                    val = tokens[i + 1]
                     i += 2
                 else:
-                    options[opt_name] = True
+                    val = True
                     i += 1
+
+                if opt_name in options:
+                    if isinstance(options[opt_name], list):
+                        options[opt_name].append(val)
+                    else:
+                        options[opt_name] = [options[opt_name], val]
+                else:
+                    options[opt_name] = val
             else:
                 positional.append(tok)
                 i += 1

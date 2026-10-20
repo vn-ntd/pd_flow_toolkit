@@ -29,13 +29,29 @@ class RuleViolation:
         }
 
 
+def _is_numeric(val: str) -> bool:
+    try:
+        float(val)
+        return True
+    except (ValueError, TypeError):
+        return False
+
+
 def _extract_referenced_clocks(val: Optional[str]) -> List[str]:
     if not val:
+        return []
+    clean = val.strip("{}[]\"' ")
+    if _is_numeric(clean):
         return []
     m = re.search(r"get_clocks\s+([^\],]+)", val)
     target = m.group(1) if m else val
     target = target.strip("{}[]\"' ")
-    return [c.strip() for c in target.split() if c.strip() and not c.startswith("[") and not c.startswith("-")]
+    clocks = []
+    for c in target.split():
+        c_clean = c.strip("{}[]\"' ")
+        if c_clean and not c_clean.startswith("[") and not c_clean.startswith("-") and not _is_numeric(c_clean):
+            clocks.append(c_clean)
+    return clocks
 
 
 class SDCRulesChecker:
@@ -90,7 +106,7 @@ class SDCRulesChecker:
                                 severity="ERROR",
                                 line_number=cmd.line_number,
                                 message=f"Duplicate primary clock name '{clk_name}' defined.",
-                                suggestion=f"Ensure each clock has a unique identifier or remove redundant definition.",
+                                suggestion="Ensure each clock has a unique identifier or remove redundant definition.",
                                 command_snippet=cmd.raw_text,
                             )
                         )
@@ -106,7 +122,12 @@ class SDCRulesChecker:
             elif name == "set_clock_uncertainty":
                 targets = []
                 if "clock" in cmd.options:
-                    targets.extend(_extract_referenced_clocks(str(cmd.options["clock"])))
+                    opt_val = cmd.options["clock"]
+                    if isinstance(opt_val, list):
+                        for c in opt_val:
+                            targets.extend(_extract_referenced_clocks(str(c)))
+                    else:
+                        targets.extend(_extract_referenced_clocks(str(opt_val)))
                 for arg in cmd.positional_args:
                     targets.extend(_extract_referenced_clocks(arg))
                 if targets:
@@ -118,7 +139,12 @@ class SDCRulesChecker:
             elif name in ("set_clock_transition", "set_clock_latency"):
                 targets = []
                 if "clock" in cmd.options:
-                    targets.extend(_extract_referenced_clocks(str(cmd.options["clock"])))
+                    opt_val = cmd.options["clock"]
+                    if isinstance(opt_val, list):
+                        for c in opt_val:
+                            targets.extend(_extract_referenced_clocks(str(c)))
+                    else:
+                        targets.extend(_extract_referenced_clocks(str(opt_val)))
                 for arg in cmd.positional_args:
                     targets.extend(_extract_referenced_clocks(arg))
                 if targets:
@@ -492,6 +518,21 @@ class SDCRulesChecker:
                     command_snippet="<Design level check>",
                 )
             )
+
+        # Validate that each set_clock_groups defines at least 2 distinct groups
+        for cmd in self.clock_group_cmds:
+            groups = cmd.get_list("group")
+            if len(groups) < 2:
+                self.violations.append(
+                    RuleViolation(
+                        rule_id="CDC-001",
+                        severity="WARNING",
+                        line_number=cmd.line_number,
+                        message="'set_clock_groups' specified fewer than 2 clock groups.",
+                        suggestion="Provide at least two -group options, e.g. 'set_clock_groups -asynchronous -group {clk1} -group {clk2}'.",
+                        command_snippet=cmd.raw_text,
+                    )
+                )
 
     def _check_syn_001_deprecated_commands(self):
         deprecated = {"set_dont_use", "set_wire_load_model", "set_operating_conditions"}
