@@ -133,6 +133,9 @@ class TestComparatorAndDashboard(unittest.TestCase):
             self.assertIn("89.2%", content)
             self.assertIn("Internal Power", content)
             self.assertIn("Switching Power", content)
+            self.assertIn("drcSearchInput", content)
+            self.assertIn("copySummaryBtn", content)
+            self.assertIn("filterDrcTable", content)
         finally:
             if os.path.exists(temp_path):
                 os.remove(temp_path)
