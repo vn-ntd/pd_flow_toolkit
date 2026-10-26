@@ -251,6 +251,87 @@ class TestParsers(unittest.TestCase):
         self.assertEqual(c.overflow_v, 6)
         self.assertEqual(c.hotspot_count, 3)
 
+    def test_openroad_single_file_target(self):
+        """Verifies OpenROAD parser handles a single file as target_path."""
+        rpt = self.examples_dir / "openroad_run" / "timing_setup.rpt"
+        parser = OpenROADParser(str(rpt), design_name="single_file_design")
+        metrics = parser.parse()
+        self.assertEqual(metrics.design_name, "single_file_design")
+        self.assertAlmostEqual(metrics.timing.setup_wns, -0.140, places=3)
+
+    def test_openroad_parse_with_metrics_csv_in_dir(self):
+        """Verifies OpenROAD parser automatically processes metrics.csv in directory."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            csv_path = Path(tmp_dir) / "metrics.csv"
+            csv_path.write_text(
+                "wns,tns,tritonRoute_violations,Magic_violations,DIEAREA_mm^2,CoreArea_um^2,OpenDP_Util,TotalCells\n"
+                "-0.15,-3.2,2,1,0.5,450000.0,65.5,12000\n",
+                encoding="utf-8",
+            )
+            parser = OpenROADParser(tmp_dir, design_name="csv_design")
+            metrics = parser.parse()
+            self.assertEqual(metrics.design_name, "csv_design")
+            self.assertAlmostEqual(metrics.timing.setup_wns, -0.15, places=2)
+            self.assertAlmostEqual(metrics.timing.setup_tns, -3.2, places=2)
+            self.assertEqual(metrics.drc.total_violations, 3)
+            self.assertAlmostEqual(metrics.area_power.die_area_um2, 500000.0, places=1)
+            self.assertAlmostEqual(metrics.area_power.core_area_um2, 450000.0, places=1)
+            self.assertAlmostEqual(metrics.area_power.utilization_pct, 65.5, places=1)
+            self.assertEqual(metrics.area_power.std_cell_count, 12000)
+
+    def test_openroad_magic_drc_count_zero_and_nonzero(self):
+        """Verifies Magic format [INFO]: COUNT: 0 clears violations and Total DRC errors: N."""
+        parser = OpenROADParser(".")
+        drc = DRCSummary(total_violations=5, violations_by_type={"Short": 5})
+        parser._parse_drc("[INFO]: COUNT: 0", drc)
+        self.assertEqual(drc.total_violations, 0)
+        self.assertEqual(len(drc.violations_by_type), 0)
+
+        drc2 = DRCSummary()
+        parser._parse_drc("Total DRC errors: 12", drc2)
+        self.assertEqual(drc2.total_violations, 12)
+
+    def test_openroad_violated_slack_fep_fallback(self):
+        """Verifies violated slack fallback sets setup_wns and computes FEP count."""
+        parser = OpenROADParser(".")
+        t = TimingSummary()
+        content = """
+        Path 1: slack (VIOLATED) -0.320
+        Path 2: slack (VIOLATED) -0.150
+        """
+        parser._parse_timing(content, t)
+        self.assertAlmostEqual(t.setup_wns, -0.320, places=3)
+        self.assertEqual(t.setup_fep, 2)
+
+    def test_openroad_hold_tns_and_skew(self):
+        """Verifies hold_tns and clock skew extraction in OpenROAD parser."""
+        parser = OpenROADParser(".")
+        t = TimingSummary()
+        content = """
+        [INFO] Hold TNS: -0.850 ns
+        [INFO] Max skew: 0.120 ns
+        """
+        parser._parse_timing(content, t)
+        self.assertAlmostEqual(t.hold_tns, -0.850, places=3)
+        self.assertAlmostEqual(t.max_clock_skew, 0.120, places=3)
+
+    def test_openroad_vertical_overflow_and_hotspots(self):
+        """Verifies vertical overflow and hotspots parsing in FastRoute."""
+        parser = OpenROADParser(".")
+        c = CongestionSummary()
+        content = """
+        [INFO GRT-0097]   Horizontal max congestion: 80.00%
+        [INFO GRT-0098]   Vertical max congestion: 85.00%
+        [INFO GRT-0099]   Horizontal overflow: 5
+        [INFO GRT-0100]   Vertical overflow: 8
+        Hotspots: 11
+        """
+        parser._parse_congestion(content, c)
+        self.assertEqual(c.overflow_h, 5)
+        self.assertEqual(c.overflow_v, 8)
+        self.assertEqual(c.hotspot_count, 11)
+
+
 
     def test_unified_log_drc_not_suppressed(self):
         """Verifies that DRC violations in a unified openroad batch log are parsed even if timing markers exist."""
