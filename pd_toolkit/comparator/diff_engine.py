@@ -37,6 +37,8 @@ class RunComparison:
     total_drc: MetricDelta
     max_congestion: MetricDelta
     utilization: MetricDelta
+    total_power: MetricDelta
+    std_cell_count: MetricDelta
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -46,6 +48,8 @@ class RunComparison:
             "total_drc": self.total_drc.formatted_delta(),
             "max_congestion": self.max_congestion.formatted_delta(),
             "utilization": self.utilization.formatted_delta(),
+            "total_power": self.total_power.formatted_delta(),
+            "std_cell_count": self.std_cell_count.formatted_delta(),
         }
 
 
@@ -64,6 +68,10 @@ class RunComparator:
         drc_delta = current.drc.total_violations - baseline.drc.total_violations
         cong_delta = current.congestion.max_pct - baseline.congestion.max_pct
         util_delta = current.area_power.utilization_pct - baseline.area_power.utilization_pct
+
+        # For Power & Cell Count (lower is better in optimization ECOs)
+        power_delta = current.area_power.total_power_mw - baseline.area_power.total_power_mw
+        cells_delta = current.area_power.std_cell_count - baseline.area_power.std_cell_count
 
         # Utilization regression evaluation:
         # Improved if current utilization remains safe (<= 85%) and change is within safe delta limits (<= +5% and >= -10%)
@@ -84,4 +92,6 @@ class RunComparator:
             total_drc=MetricDelta(float(baseline.drc.total_violations), float(current.drc.total_violations), float(drc_delta), drc_delta <= 0, is_integer=True),
             max_congestion=MetricDelta(baseline.congestion.max_pct, current.congestion.max_pct, cong_delta, cong_delta <= 0, "%"),
             utilization=MetricDelta(baseline.area_power.utilization_pct, current.area_power.utilization_pct, util_delta, util_improved, "%"),
+            total_power=MetricDelta(baseline.area_power.total_power_mw, current.area_power.total_power_mw, power_delta, power_delta <= 0, "mW"),
+            std_cell_count=MetricDelta(float(baseline.area_power.std_cell_count), float(current.area_power.std_cell_count), float(cells_delta), cells_delta <= 0, is_integer=True),
         )

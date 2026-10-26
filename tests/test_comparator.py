@@ -100,6 +100,25 @@ class TestComparatorAndDashboard(unittest.TestCase):
         self.assertFalse(diff_reg.hold_wns.improved)
         self.assertFalse(diff_reg.max_congestion.improved)
 
+    def test_ppa_power_and_cells(self):
+        """Verifies PPA completion by testing power and std cell count deltas."""
+        base = PDRunMetrics(
+            design_name="top",
+            area_power=AreaPowerSummary(total_power_mw=50.0, std_cell_count=20000),
+        )
+        curr = PDRunMetrics(
+            design_name="top",
+            area_power=AreaPowerSummary(total_power_mw=45.5, std_cell_count=19500),
+        )
+        diff = RunComparator.compare(base, curr)
+        self.assertAlmostEqual(diff.total_power.delta, -4.5, places=1)
+        self.assertTrue(diff.total_power.improved)
+        self.assertEqual(diff.std_cell_count.delta, -500)
+        self.assertTrue(diff.std_cell_count.improved)
+        self.assertTrue(diff.std_cell_count.is_integer)
+        self.assertIn("total_power", diff.to_dict())
+        self.assertIn("std_cell_count", diff.to_dict())
+
     def test_html_dashboard_generation(self):
         with tempfile.NamedTemporaryFile(suffix=".html", delete=False) as tf:
             temp_path = tf.name

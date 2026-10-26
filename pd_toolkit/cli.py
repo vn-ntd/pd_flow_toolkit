@@ -160,6 +160,8 @@ def cmd_compare(args):
     print_row("Total DRC", diff.total_drc)
     print_row("Peak Congestion (%)", diff.max_congestion)
     print_row("Utilization (%)", diff.utilization)
+    print_row("Total Power (mW)", diff.total_power)
+    print_row("Std Cell Count", diff.std_cell_count)
     print("=" * 70)
     return 0
 
