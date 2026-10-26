@@ -182,6 +182,23 @@ class TestSDCLinter(unittest.TestCase):
         report = self._lint_string(sdc)
         self.assertTrue(any(v.rule_id == "SYN-000" for v in report.violations))
 
+    def test_sdc_tcl_variables(self):
+        """Verifies SDC with Tcl variables 'set CLK_PERIOD 10.0' substitutes correctly without CLK-001 false positive."""
+        sdc = """
+        set CLK_PERIOD 10.0
+        set IN_DELAY 2.5
+        create_clock -name core_clk -period $CLK_PERIOD [get_ports clk]
+        set_clock_uncertainty 0.150 [get_clocks core_clk]
+        set_input_delay -clock core_clk $IN_DELAY [get_ports in_data]
+        set_output_delay -clock core_clk 2.0 [get_ports out_data]
+        """
+        report = self._lint_string(sdc)
+        rule_ids = [v.rule_id for v in report.violations]
+        self.assertNotIn("CLK-001", rule_ids)
+        self.assertNotIn("IO-003", rule_ids)
+        self.assertEqual(report.error_count, 0)
+
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -3,6 +3,7 @@ SDC (Synopsys Design Constraints) Tokenizer and Command Parser.
 Handles line continuations (\), comments (#), nested brackets, and option parsing.
 """
 
+import re
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Any
 
@@ -40,10 +41,12 @@ class SDCParser:
         self.filepath = filepath
         self.commands: List[SDCCommand] = []
         self.syntax_errors: List[str] = []
+        self.variables: Dict[str, str] = {}
 
     def parse(self) -> List[SDCCommand]:
         self.commands = []
         self.syntax_errors = []
+        self.variables = {}
 
         with open(self.filepath, "r", encoding="utf-8", errors="ignore") as f:
             lines = f.readlines()
@@ -77,9 +80,14 @@ class SDCParser:
             else:
                 current_cmd += stripped_line
                 in_continuation = False
-                # Parse completed command
-                cmd_obj = self._parse_single_command(current_cmd, start_line)
+                # Parse completed command with variable substitution
+                expanded_cmd = self._substitute_variables(current_cmd)
+                cmd_obj = self._parse_single_command(expanded_cmd, start_line)
                 if cmd_obj:
+                    if cmd_obj.command_name == "set" and len(cmd_obj.positional_args) >= 2:
+                        var_name = cmd_obj.positional_args[0].strip("{}")
+                        var_val = cmd_obj.positional_args[1].strip("\"'{}")
+                        self.variables[var_name] = var_val
                     self.commands.append(cmd_obj)
                 current_cmd = ""
 
@@ -87,6 +95,16 @@ class SDCParser:
             self.syntax_errors.append(f"Line {start_line}: Trailing backslash (\\) at end of file.")
 
         return self.commands
+
+    def _substitute_variables(self, text: str) -> str:
+        if not self.variables:
+            return text
+
+        def _repl(match):
+            var_name = match.group(1) or match.group(2)
+            return self.variables.get(var_name, match.group(0))
+
+        return re.sub(r"\$(?:\{([A-Za-z0-9_]+)\}|([A-Za-z0-9_]+))", _repl, text)
 
     def _strip_inline_comment(self, text: str) -> str:
         in_quote = False
