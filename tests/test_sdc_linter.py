@@ -199,6 +199,5 @@ class TestSDCLinter(unittest.TestCase):
         self.assertEqual(report.error_count, 0)
 
 
-
 if __name__ == "__main__":
     unittest.main()

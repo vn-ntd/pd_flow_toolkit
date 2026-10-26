@@ -217,6 +217,5 @@ class TestCLI(unittest.TestCase):
             self.assertIn("CLK-001", content)
 
 
-
 if __name__ == "__main__":
     unittest.main()

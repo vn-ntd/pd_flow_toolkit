@@ -331,8 +331,6 @@ class TestParsers(unittest.TestCase):
         self.assertEqual(c.overflow_v, 8)
         self.assertEqual(c.hotspot_count, 11)
 
-
-
     def test_unified_log_drc_not_suppressed(self):
         """Verifies that DRC violations in a unified openroad batch log are parsed even if timing markers exist."""
         parser = OpenROADParser(".")
@@ -349,7 +347,6 @@ class TestParsers(unittest.TestCase):
         self.assertEqual(drc.total_violations, 1)
         self.assertEqual(drc.violations_by_type.get("Short"), 1)
         self.assertEqual(drc.violations_by_layer.get("Metal2"), 1)
-
 
 
 if __name__ == "__main__":
