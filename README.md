@@ -109,8 +109,8 @@ python pd_tool.py parse --path examples/openroad_run --tool openroad --design ri
 # Đối với Cadence Innovus flow:
 python pd_tool.py parse --path examples/innovus_run --tool innovus --design gpu_tile --dashboard innovus_dash.html
 
-# Tự động nhận diện flow và xuất JSON cho CI/CD:
-python pd_tool.py parse --path /path/to/pd/run --output-json metrics.json --dashboard signoff.html
+# Tự động nhận diện flow và xuất JSON / Markdown cho CI/CD (GitHub Actions / GitLab CI):
+python pd_tool.py parse --path /path/to/pd/run --output-json metrics.json --output-md summary.md --dashboard signoff.html
 ```
 
 ### 3. Kiểm tra tính toàn vẹn file SDC (Pre-Synthesis Linting)
@@ -118,16 +118,20 @@ python pd_tool.py parse --path /path/to/pd/run --output-json metrics.json --dash
 # Kiểm tra file SDC chuẩn:
 python pd_tool.py lint-sdc --sdc examples/sdc/clean_soc.sdc
 
-# Kiểm tra file SDC có lỗi và xuất JSON:
-python pd_tool.py lint-sdc --sdc examples/sdc/dirty_soc.sdc --output-json sdc_lint_report.json
+# Kiểm tra file SDC có lỗi và xuất JSON / Markdown:
+python pd_tool.py lint-sdc --sdc examples/sdc/dirty_soc.sdc --output-json sdc_lint_report.json --output-md sdc_report.md
 
 # Bật cờ fail khi có cảnh báo (dành cho CI/CD regression):
 python pd_tool.py lint-sdc --sdc constraints.sdc --fail-on-warning
 ```
 
-### 4. So sánh Regression giữa 2 lần chạy P&R
+### 4. So sánh Regression giữa 2 lần chạy P&R (Đầy đủ tam giác PPA: Power - Timing - Area)
 ```bash
+# So sánh và in bảng terminal trực quan:
 python pd_tool.py compare --baseline examples/openroad_run --current examples/innovus_run
+
+# So sánh và xuất báo cáo Markdown / JSON cho CI/CD PR comment:
+python pd_tool.py compare --baseline examples/openroad_run --current examples/innovus_run --output-md regression_diff.md --output-json regression_diff.json
 ```
 
 ### 5. Chạy Automated Unit Tests & Kiểm Tra Độ Bao Phủ Mã Nguồn (Coverage)
