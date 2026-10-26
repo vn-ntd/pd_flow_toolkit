@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 import tempfile
 from pd_toolkit.parsers import parse_reports, detect_tool, OpenROADParser, InnovusParser
-from pd_toolkit.parsers.base_parser import AreaPowerSummary, TimingSummary, DRCSummary
+from pd_toolkit.parsers.base_parser import AreaPowerSummary, TimingSummary, DRCSummary, CongestionSummary
 
 
 class TestParsers(unittest.TestCase):
@@ -206,6 +206,51 @@ class TestParsers(unittest.TestCase):
         # Parse positive slack +0.250 from second report: setup_wns should remain min(0.0, 0.25) = 0.0
         parser._parse_timing("[INFO] Worst slack: 0.250 ns", t)
         self.assertEqual(t.setup_wns, 0.0)
+
+    def test_innovus_multistage_timing(self):
+        """Verifies Innovus parser grabs the final signoff table rather than the early pre-CTS table."""
+        parser = InnovusParser(".")
+        t = TimingSummary()
+        content = """
+        ================================================================
+        Setup mode (Pre-CTS Placement Stage)
+        ----------------------------------------------------------------
+        |  WNS (ns):   | -0.450 |
+        |  TNS (ns):   | -12.50 |
+        |  Violating Paths: | 45 |
+        ================================================================
+
+        ... Optimization and Routing steps ...
+
+        ================================================================
+        Setup mode (Post-Route Signoff Stage)
+        ----------------------------------------------------------------
+        |  WNS (ns):   | -0.050 |
+        |  TNS (ns):   | -0.850 |
+        |  Violating Paths: | 2  |
+        ================================================================
+        """
+        parser._parse_timedesign_tables(content, t)
+        self.assertAlmostEqual(t.setup_wns, -0.050, places=3)
+        self.assertAlmostEqual(t.setup_tns, -0.850, places=3)
+        self.assertEqual(t.setup_fep, 2)
+
+    def test_innovus_explicit_hv_congestion(self):
+        """Verifies Innovus parser extracts explicit H and V overflows correctly without faking 50/50 split."""
+        parser = InnovusParser(".")
+        c = CongestionSummary()
+        content = """
+        Max H Congestion: 78.5%
+        Max V Congestion: 82.1%
+        Horizontal Overflow: 14
+        Vertical Overflow: 6
+        Hotspot Count: 3
+        """
+        parser._parse_congestion(content, c)
+        self.assertEqual(c.overflow_h, 14)
+        self.assertEqual(c.overflow_v, 6)
+        self.assertEqual(c.hotspot_count, 3)
+
 
     def test_unified_log_drc_not_suppressed(self):
         """Verifies that DRC violations in a unified openroad batch log are parsed even if timing markers exist."""

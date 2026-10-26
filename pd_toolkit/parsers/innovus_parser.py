@@ -65,12 +65,12 @@ class InnovusParser(BaseReportParser):
         return []
 
     def _parse_timedesign_tables(self, content: str, timing: TimingSummary):
-        # 1. Parse Innovus timeDesign Setup Table
+        # 1. Parse Innovus timeDesign Setup Table (take final signoff occurrence in log)
         if "Setup mode" in content:
-            setup_part = content[content.find("Setup mode"):]
+            setup_part = content[content.rfind("Setup mode"):]
             wns_row = re.search(r"\|\s*WNS\s*\([^)]*\)\s*:\s*\|\s*([+-]?\d+(?:\.\d+)?|N/A)", setup_part, re.IGNORECASE)
             if wns_row and wns_row.group(1) != "N/A":
-                timing.setup_wns = float(wns_row.group(1))
+                timing.record_setup_wns(float(wns_row.group(1)))
 
             tns_row = re.search(r"\|\s*TNS\s*\([^)]*\)\s*:\s*\|\s*([+-]?\d+(?:\.\d+)?|N/A)", setup_part, re.IGNORECASE)
             if tns_row and tns_row.group(1) != "N/A":
@@ -80,12 +80,12 @@ class InnovusParser(BaseReportParser):
             if vio_row:
                 timing.setup_fep = int(vio_row.group(1))
 
-        # 2. Parse Innovus timeDesign Hold Table
+        # 2. Parse Innovus timeDesign Hold Table (take final signoff occurrence in log)
         if "Hold mode" in content:
-            hold_part = content[content.find("Hold mode"):]
+            hold_part = content[content.rfind("Hold mode"):]
             h_wns = re.search(r"\|\s*WNS\s*\([^)]*\)\s*:\s*\|\s*([+-]?\d+(?:\.\d+)?|N/A)", hold_part, re.IGNORECASE)
             if h_wns and h_wns.group(1) != "N/A":
-                timing.hold_wns = float(h_wns.group(1))
+                timing.record_hold_wns(float(h_wns.group(1)))
 
             h_tns = re.search(r"\|\s*TNS\s*\([^)]*\)\s*:\s*\|\s*([+-]?\d+(?:\.\d+)?|N/A)", hold_part, re.IGNORECASE)
             if h_tns and h_tns.group(1) != "N/A":
@@ -108,7 +108,7 @@ class InnovusParser(BaseReportParser):
         if timing.setup_wns == 0.0 and "Setup mode" not in content and "Hold mode" not in content:
             m = re.search(r"(?:worst\s+slack|wns)\s*[:=]\s*([+-]?\d+(?:\.\d+)?)", content, re.IGNORECASE)
             if m:
-                timing.setup_wns = float(m.group(1))
+                timing.record_setup_wns(float(m.group(1)))
 
     def _parse_drc_verify_geometry(self, content: str, drc: DRCSummary):
         # Innovus verifyGeometry / verify_drc output:
@@ -150,12 +150,22 @@ class InnovusParser(BaseReportParser):
         if v_m:
             cong.v_max_pct = max(cong.v_max_pct, float(v_m.group(1)))
 
-        # Overflow: "Total 2D Overflow: 15" or "overflow : 5"
-        ovf = re.search(r"(?:Total\s+2D\s+Overflow|overflow)\s*[:=]\s*(\d+)", content, re.IGNORECASE)
-        if ovf:
-            val = int(ovf.group(1))
-            cong.overflow_h = val // 2
-            cong.overflow_v = val - cong.overflow_h
+        # Explicit Horizontal & Vertical Overflow
+        h_ovf = re.search(r"(?:Horizontal\s+Overflow|H-Overflow)\s*[:=]\s*(\d+)", content, re.IGNORECASE)
+        if h_ovf:
+            cong.overflow_h = max(cong.overflow_h, int(h_ovf.group(1)))
+
+        v_ovf = re.search(r"(?:Vertical\s+Overflow|V-Overflow)\s*[:=]\s*(\d+)", content, re.IGNORECASE)
+        if v_ovf:
+            cong.overflow_v = max(cong.overflow_v, int(v_ovf.group(1)))
+
+        # Fallback 2D Overflow if H/V were not separately specified (preserve total without fabricating 50/50 split)
+        if cong.overflow_h == 0 and cong.overflow_v == 0:
+            ovf = re.search(r"(?:Total\s+2D\s+Overflow|2D\s+Overflow|overflow)\s*[:=]\s*(\d+)", content, re.IGNORECASE)
+            if ovf:
+                val = int(ovf.group(1))
+                cong.overflow_h = val
+                cong.overflow_v = 0
 
         # Hotspots
         hot = re.search(r"(?:Hotspot\s+Count|Congested\s+Bins)\s*[:=]\s*(\d+)", content, re.IGNORECASE)
