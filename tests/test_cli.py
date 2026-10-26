@@ -149,6 +149,74 @@ class TestCLI(unittest.TestCase):
         ret = cmd_compare(args)
         self.assertEqual(ret, 0)
 
+    def test_cli_parse_markdown_export(self):
+        """Verifies parse command exports CI/CD friendly Markdown summary."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            md_out = Path(tmp_dir) / "summary.md"
+            args = self.parser.parse_args([
+                "parse",
+                "--path", str(self.examples_dir / "openroad_run"),
+                "--tool", "openroad",
+                "--design", "riscv_core",
+                "--output-md", str(md_out),
+            ])
+            cmd_parse(args)
+            self.assertTrue(md_out.exists())
+            content = md_out.read_text(encoding="utf-8")
+            self.assertIn("## 📊 Physical Design Signoff Summary: riscv_core", content)
+            self.assertIn("| **Setup WNS** |", content)
+            self.assertIn("| **Total DRC** |", content)
+            self.assertIn("| **Total Power** |", content)
+
+    def test_cli_compare_markdown_and_json_export(self):
+        """Verifies compare command exports Markdown and JSON regression diffs."""
+        base_path = self.examples_dir / "openroad_run"
+        curr_path = self.examples_dir / "innovus_run"
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            md_out = Path(tmp_dir) / "regression_diff.md"
+            json_out = Path(tmp_dir) / "regression_diff.json"
+
+            args = self.parser.parse_args([
+                "compare",
+                "--baseline", str(base_path),
+                "--current", str(curr_path),
+                "--output-md", str(md_out),
+                "--output-json", str(json_out),
+            ])
+            ret = cmd_compare(args)
+            self.assertEqual(ret, 0)
+
+            # Check Markdown output
+            self.assertTrue(md_out.exists())
+            md_content = md_out.read_text(encoding="utf-8")
+            self.assertIn("## ⚖️ Physical Design Regression Comparison", md_content)
+            self.assertIn("| **Setup WNS (ns)** |", md_content)
+            self.assertIn("| **Total Power (mW)** |", md_content)
+
+            # Check JSON output
+            self.assertTrue(json_out.exists())
+            data = json.loads(json_out.read_text(encoding="utf-8"))
+            self.assertIn("total_power", data)
+            self.assertIn("std_cell_count", data)
+
+    def test_cli_lint_sdc_markdown_export(self):
+        """Verifies lint-sdc command exports Markdown report."""
+        dirty_file = self.examples_dir / "sdc" / "dirty_soc.sdc"
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            md_out = Path(tmp_dir) / "sdc_report.md"
+            args = self.parser.parse_args([
+                "lint-sdc",
+                "--sdc", str(dirty_file),
+                "--output-md", str(md_out),
+            ])
+            cmd_lint_sdc(args)
+            self.assertTrue(md_out.exists())
+            content = md_out.read_text(encoding="utf-8")
+            self.assertIn("## 🛡️ SDC Lint Report:", content)
+            self.assertIn("CLK-001", content)
+
+
 
 if __name__ == "__main__":
     unittest.main()

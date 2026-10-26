@@ -5,12 +5,13 @@ Command Line Interface for Physical Design Automation Toolkit.
 import argparse
 import sys
 import os
+import json
 from pathlib import Path
 
-from .parsers import parse_reports
+from .parsers import parse_reports, PDRunMetrics
 from .dashboard import generate_html_dashboard
 from .sdc_linter import SDCLinter
-from .comparator import RunComparator
+from .comparator import RunComparator, RunComparison
 
 
 # Reconfigure stdout/stderr for Windows UTF-8 console output
@@ -42,6 +43,81 @@ def print_banner():
   ASIC/SoC Physical Design Automation & Quality Signoff Suite
 ======================================================================{RESET}"""
     print(banner)
+
+
+def generate_parse_markdown(metrics: PDRunMetrics) -> str:
+    status = metrics.overall_status
+    status_badge = "✅ PASS" if status == "PASS" else ("⚠️ WARN" if status == "WARN" else "❌ FAIL")
+    lines = [
+        f"## 📊 Physical Design Signoff Summary: {metrics.design_name}",
+        f"- **Status**: `{status}` ({status_badge})",
+        f"- **Tool / Stage**: {metrics.tool_name} / {metrics.stage}",
+        "",
+        "| Metric | Value | Signoff Target | Status |",
+        "| :--- | :--- | :--- | :--- |",
+        f"| **Setup WNS** | `{metrics.timing.setup_wns:+.3f} ns` | `>= 0.000 ns` | {'✅ PASS' if metrics.timing.setup_passed else '❌ FAIL'} |",
+        f"| **Setup TNS** | `{metrics.timing.setup_tns:.3f} ns` | `== 0.000 ns` | {'✅ PASS' if metrics.timing.setup_tns >= 0 else '❌ FAIL'} |",
+        f"| **Setup FEP** | `{metrics.timing.setup_fep}` | `0` | {'✅ PASS' if metrics.timing.setup_fep == 0 else '❌ FAIL'} |",
+        f"| **Hold WNS** | `{metrics.timing.hold_wns:+.3f} ns` | `>= 0.000 ns` | {'✅ PASS' if metrics.timing.hold_passed else '❌ FAIL'} |",
+        f"| **Total DRC** | `{metrics.drc.total_violations}` | `0` | {'✅ PASS' if metrics.drc.passed else '❌ FAIL'} |",
+        f"| **Peak Congestion** | `{metrics.congestion.max_pct:.1f}%` | `< 85.0%` | {'✅ PASS' if metrics.congestion.max_pct < 85 else '⚠️ WARN'} |",
+        f"| **Core Utilization** | `{metrics.area_power.utilization_pct:.1f}%` | `< 85.0%` | {'✅ PASS' if metrics.area_power.utilization_pct <= 85 else '⚠️ WARN'} |",
+        f"| **Total Power** | `{metrics.area_power.total_power_mw:.2f} mW` | `-` | ℹ️ INFO |",
+        f"| **Std Cell Instances** | `{metrics.area_power.std_cell_count:,}` | `-` | ℹ️ INFO |",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def generate_compare_markdown(diff: RunComparison, base_metrics: PDRunMetrics, curr_metrics: PDRunMetrics) -> str:
+    lines = [
+        "## ⚖️ Physical Design Regression Comparison",
+        f"**Baseline ({base_metrics.tool_name}) vs Current ({curr_metrics.tool_name})** - Design: `{diff.design_name}`",
+        "",
+        "| Metric | Baseline | Current | Delta | Evaluation |",
+        "| :--- | :--- | :--- | :--- | :--- |",
+    ]
+    metrics_list = [
+        ("Setup WNS (ns)", diff.setup_wns),
+        ("Setup TNS (ns)", diff.setup_tns),
+        ("Hold WNS (ns)", diff.hold_wns),
+        ("Total DRC", diff.total_drc),
+        ("Peak Congestion (%)", diff.max_congestion),
+        ("Utilization (%)", diff.utilization),
+        ("Total Power (mW)", diff.total_power),
+        ("Std Cell Count", diff.std_cell_count),
+    ]
+    for name, delta_obj in metrics_list:
+        eval_str = "🟢 Improved" if delta_obj.improved else ("⚪ No Change" if delta_obj.delta == 0 else "🔴 Regression")
+        if delta_obj.is_integer:
+            b_val = str(int(round(delta_obj.baseline)))
+            c_val = str(int(round(delta_obj.current)))
+        else:
+            b_val = f"{delta_obj.baseline:.3f}"
+            c_val = f"{delta_obj.current:.3f}"
+        lines.append(f"| **{name}** | `{b_val}` | `{c_val}` | `{delta_obj.formatted_delta()}` | {eval_str} |")
+    return "\n".join(lines) + "\n"
+
+
+def generate_sdc_markdown(report) -> str:
+    lines = [
+        f"## 🛡️ SDC Lint Report: `{os.path.basename(report.filepath)}`",
+        f"- **Status**: `{'PASS' if report.passed else 'FAIL'}`",
+        f"- **Errors**: {report.error_count} | **Warnings**: {report.warning_count} | **Info**: {report.info_count}",
+        "",
+    ]
+    if not report.violations:
+        lines.append("✓ Constraints are clean. No violations found.")
+    else:
+        lines.extend([
+            "| Severity | Rule ID | Line | Message | Suggestion |",
+            "| :--- | :--- | :--- | :--- | :--- |",
+        ])
+        for v in report.violations:
+            sev_icon = "🔴 ERROR" if v.severity == "ERROR" else ("🟡 WARN" if v.severity == "WARNING" else "🔵 INFO")
+            clean_msg = v.message.replace("|", "/")
+            clean_sug = v.suggestion.replace("|", "/")
+            lines.append(f"| {sev_icon} | `{v.rule_id}` | {v.line_number} | {clean_msg} | {clean_sug} |")
+    return "\n".join(lines) + "\n"
 
 
 def cmd_parse(args):
@@ -79,6 +155,13 @@ def cmd_parse(args):
         out_p.parent.mkdir(parents=True, exist_ok=True)
         out_p.write_text(metrics.to_json(), encoding="utf-8")
         print(f"{GREEN}✓ Exported JSON metrics to: {out_p.resolve()}{RESET}")
+
+    # Export Markdown if requested
+    if getattr(args, "output_md", None):
+        out_md = Path(args.output_md)
+        out_md.parent.mkdir(parents=True, exist_ok=True)
+        out_md.write_text(generate_parse_markdown(metrics), encoding="utf-8")
+        print(f"{GREEN}✓ Exported Markdown summary to: {out_md.resolve()}{RESET}")
 
     # Generate Dashboard HTML
     dash_path = args.dashboard or "pd_dashboard.html"
@@ -119,6 +202,12 @@ def cmd_lint_sdc(args):
         out_p.parent.mkdir(parents=True, exist_ok=True)
         out_p.write_text(report.to_json(), encoding="utf-8")
         print(f"{GREEN}✓ Saved JSON lint report to: {out_p.resolve()}{RESET}")
+
+    if getattr(args, "output_md", None):
+        out_md = Path(args.output_md)
+        out_md.parent.mkdir(parents=True, exist_ok=True)
+        out_md.write_text(generate_sdc_markdown(report), encoding="utf-8")
+        print(f"{GREEN}✓ Saved Markdown lint report to: {out_md.resolve()}{RESET}")
 
     if report.error_count > 0:
         return 1
@@ -163,6 +252,19 @@ def cmd_compare(args):
     print_row("Total Power (mW)", diff.total_power)
     print_row("Std Cell Count", diff.std_cell_count)
     print("=" * 70)
+
+    if getattr(args, "output_md", None):
+        out_md = Path(args.output_md)
+        out_md.parent.mkdir(parents=True, exist_ok=True)
+        out_md.write_text(generate_compare_markdown(diff, base_metrics, curr_metrics), encoding="utf-8")
+        print(f"{GREEN}✓ Exported Markdown comparison to: {out_md.resolve()}{RESET}")
+
+    if getattr(args, "output_json", None):
+        out_j = Path(args.output_json)
+        out_j.parent.mkdir(parents=True, exist_ok=True)
+        out_j.write_text(json.dumps(diff.to_dict(), indent=2), encoding="utf-8")
+        print(f"{GREEN}✓ Exported JSON comparison to: {out_j.resolve()}{RESET}")
+
     return 0
 
 
@@ -224,12 +326,14 @@ def build_parser():
     p_parse.add_argument("--design", "-d", default=None, help="Design / Block name")
     p_parse.add_argument("--stage", "-s", default="Signoff", help="PD flow stage (e.g. CTS, Route, Signoff)")
     p_parse.add_argument("--output-json", "-j", help="Output JSON metrics file path")
+    p_parse.add_argument("--output-md", "-m", help="Output Markdown summary file path for CI/CD")
     p_parse.add_argument("--dashboard", "-o", default="dashboard.html", help="Output HTML dashboard file path")
 
     # Command: lint-sdc
     p_sdc = subparsers.add_parser("lint-sdc", help="Lint SDC file for clock integrity and unconstrained paths")
     p_sdc.add_argument("--sdc", "-f", required=True, help="Path to .sdc file")
     p_sdc.add_argument("--output-json", "-j", help="Output JSON report file path")
+    p_sdc.add_argument("--output-md", "-m", help="Output Markdown report file path for CI/CD")
     p_sdc.add_argument("--fail-on-warning", action="store_true", help="Return error code if warnings exist")
 
     # Command: compare
@@ -238,6 +342,8 @@ def build_parser():
     p_cmp.add_argument("--current", "-c", required=True, help="Path to current run reports")
     p_cmp.add_argument("--tool-base", default="auto", help="Baseline tool format")
     p_cmp.add_argument("--tool-curr", default="auto", help="Current tool format")
+    p_cmp.add_argument("--output-json", "-j", help="Output JSON comparison file path")
+    p_cmp.add_argument("--output-md", "-m", help="Output Markdown comparison file path for CI/CD")
 
     # Command: demo
     subparsers.add_parser("demo", help="Run full self-test demo with included mock datasets")
