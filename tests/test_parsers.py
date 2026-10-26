@@ -159,6 +159,72 @@ class TestParsers(unittest.TestCase):
         self.assertEqual(t.max_slew_violations, 5)
         self.assertEqual(t.max_cap_violations, 3)
 
+    def test_openroad_csv_micro_power(self):
+        """Verifies CSV parsing correctly converts sub-microwatt values without inverted multiplication."""
+        parser = OpenROADParser(".")
+        metrics = parse_reports(str(self.examples_dir / "openroad_run"), tool="openroad")
+        with tempfile.NamedTemporaryFile("w", suffix=".csv", delete=False, encoding="utf-8") as tf:
+            tf.write("spef_wns,spef_tns,power_typical_internal_uW,power_typical_switching_uW,power_typical_leakage_uW\n")
+            tf.write("-0.05,-1.2,0.45,0.25,0.10\n")
+            csv_path = Path(tf.name)
+        try:
+            parser._parse_metrics_csv(csv_path, metrics)
+            # 0.45 uW should be 0.00045 mW, NOT 450.0 mW
+            self.assertAlmostEqual(metrics.area_power.internal_power_mw, 0.00045, places=5)
+            self.assertAlmostEqual(metrics.area_power.switching_power_mw, 0.00025, places=5)
+            self.assertAlmostEqual(metrics.area_power.leakage_power_mw, 0.00010, places=5)
+        finally:
+            if csv_path.exists():
+                csv_path.unlink()
+
+    def test_triton_multiline_drc(self):
+        """Verifies multiline TritonRoute DRC violation block extracts layer properly."""
+        parser = OpenROADParser(".")
+        drc = DRCSummary()
+        content = """
+        [INFO DRT-0199] Total violations: 2
+        violation type: Short
+          srcs: net1 net2
+          layer: Metal3
+        violation type: MinSpacing
+          srcs: net3
+          layer: Metal4
+        """
+        parser._parse_drc(content, drc)
+        self.assertEqual(drc.total_violations, 2)
+        self.assertEqual(drc.violations_by_type.get("Short"), 1)
+        self.assertEqual(drc.violations_by_layer.get("Metal3"), 1)
+        self.assertEqual(drc.violations_by_layer.get("Metal4"), 1)
+
+    def test_timing_exact_zero_slack_not_overwritten(self):
+        """Verifies that 0.000 ns slack is not treated as uninitialized sentinel and overwritten by higher slack."""
+        parser = OpenROADParser(".")
+        t = TimingSummary()
+        # Parse exact 0.000 critical slack first
+        parser._parse_timing("[INFO] Worst slack: 0.000 ns", t)
+        self.assertEqual(t.setup_wns, 0.0)
+        # Parse positive slack +0.250 from second report: setup_wns should remain min(0.0, 0.25) = 0.0
+        parser._parse_timing("[INFO] Worst slack: 0.250 ns", t)
+        self.assertEqual(t.setup_wns, 0.0)
+
+    def test_unified_log_drc_not_suppressed(self):
+        """Verifies that DRC violations in a unified openroad batch log are parsed even if timing markers exist."""
+        parser = OpenROADParser(".")
+        drc = DRCSummary()
+        content = """
+        Startpoint: u_reg/D
+        Endpoint: u_out/Q
+        slack (MET) 0.50
+
+        [INFO DRT-0199] Total violations: 1
+        violation type: Short, layer: Metal2
+        """
+        parser._parse_drc(content, drc)
+        self.assertEqual(drc.total_violations, 1)
+        self.assertEqual(drc.violations_by_type.get("Short"), 1)
+        self.assertEqual(drc.violations_by_layer.get("Metal2"), 1)
+
+
 
 if __name__ == "__main__":
     unittest.main()

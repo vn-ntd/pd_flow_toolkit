@@ -82,7 +82,7 @@ class OpenROADParser(BaseReportParser):
         )
         if wns_matches:
             val = float(wns_matches[-1])
-            timing.setup_wns = min(timing.setup_wns, val) if timing.setup_wns != 0.0 else val
+            timing.record_setup_wns(val)
 
         # Path slack (VIOLATED) -0.15
         violated_slacks = re.findall(
@@ -90,7 +90,7 @@ class OpenROADParser(BaseReportParser):
         )
         if violated_slacks:
             val = min(float(x) for x in violated_slacks)
-            timing.setup_wns = min(timing.setup_wns, val) if timing.setup_wns != 0.0 else val
+            timing.record_setup_wns(val)
 
         # 2. Setup TNS
         tns_matches = re.findall(
@@ -122,7 +122,7 @@ class OpenROADParser(BaseReportParser):
             re.IGNORECASE,
         )
         if hold_matches:
-            timing.hold_wns = float(hold_matches[-1])
+            timing.record_hold_wns(float(hold_matches[-1]))
 
         hold_tns_matches = re.findall(
             r"(?:hold\s+tns|hold_total_slack)\s*[:=]?\s*([+-]?\d+(?:\.\d+)?)",
@@ -146,8 +146,15 @@ class OpenROADParser(BaseReportParser):
             timing.max_clock_skew = max(timing.max_clock_skew, float(skew_matches[-1]))
 
     def _parse_drc(self, content: str, drc: DRCSummary, filename: str = ""):
-        # Ignore STA logs and timing reports for DRC parsing to avoid false positives
-        if any(marker in content for marker in ("Startpoint:", "Endpoint:", "Path Group:", "report_checks", "tns 0.00")):
+        # Ignore purely STA logs and timing reports for DRC parsing to avoid false positives,
+        # unless explicit DRC sections or tool markers are detected
+        has_explicit_drc = any(
+            m in content for m in ("DRT-", "TritonRoute", "detailed route drc", "violation type:", "Magic", "COUNT:")
+        )
+        has_sta_markers = any(
+            marker in content for marker in ("Startpoint:", "Endpoint:", "Path Group:", "report_checks")
+        )
+        if has_sta_markers and not has_explicit_drc:
             return
 
         # Magic DRC OpenLane format: "[INFO]: COUNT: 0"
@@ -162,19 +169,27 @@ class OpenROADParser(BaseReportParser):
             return
 
         # OpenROAD TritonRoute: "[INFO DRT-0199] Total violations: 24"
-        tr_total = re.search(r"Total\s+violations\s*:\s*(\d+)", content, re.IGNORECASE)
+        tr_total = re.search(r"(?:\[INFO DRT-\d+\]\s*)?Total\s+violations\s*:\s*(\d+)", content, re.IGNORECASE)
         if tr_total:
             drc.total_violations = max(drc.total_violations, int(tr_total.group(1)))
 
-        # TritonRoute violation line format (require explicit 'violation type:'):
+        # TritonRoute violation blocks (handles single-line or multiline with indented layer):
         #   violation type: Short, layer: Metal2
-        for m in re.finditer(
-            r"violation\s+type\s*:\s*([A-Za-z0-9_]+)(?:.*layer\s*:\s*([A-Za-z0-9_]+))?",
+        # or:
+        #   violation type: Short
+        #     srcs: net1 net2
+        #     layer: Metal3
+        v_blocks = re.findall(
+            r"violation\s+type\s*:\s*([A-Za-z0-9_]+)([\s\S]*?)(?=(?:violation\s+type\s*:|$))",
             content,
             re.IGNORECASE,
-        ):
-            vtype = m.group(1).strip()
-            layer = m.group(2).strip() if m.group(2) else "Unknown"
+        )
+        for vtype, block in v_blocks:
+            vtype = vtype.strip()
+            # If the block goes past the DRC section into timing or other commands, stop at double newline
+            block_content = block.split("\n\n")[0]
+            layer_match = re.search(r"layer\s*:\s*([A-Za-z0-9_]+)", block_content, re.IGNORECASE)
+            layer = layer_match.group(1).strip() if layer_match else "Unknown"
             drc.violations_by_type[vtype] = drc.violations_by_type.get(vtype, 0) + 1
             drc.violations_by_layer[layer] = drc.violations_by_layer.get(layer, 0) + 1
             drc.violations_details.append({"type": vtype, "layer": layer})
@@ -195,21 +210,21 @@ class OpenROADParser(BaseReportParser):
                 reader = csv.DictReader(f)
                 for row in reader:
                     # Timing
-                    if "spef_wns" in row and row["spef_wns"] != "-1":
-                        metrics.timing.setup_wns = float(row["spef_wns"])
-                    elif "wns" in row and row["wns"] != "-1":
-                        metrics.timing.setup_wns = float(row["wns"])
+                    if "spef_wns" in row and row["spef_wns"] not in ("", "-1"):
+                        metrics.timing.record_setup_wns(float(row["spef_wns"]))
+                    elif "wns" in row and row["wns"] not in ("", "-1"):
+                        metrics.timing.record_setup_wns(float(row["wns"]))
 
-                    if "spef_tns" in row and row["spef_tns"] != "-1":
+                    if "spef_tns" in row and row["spef_tns"] not in ("", "-1"):
                         metrics.timing.setup_tns = float(row["spef_tns"])
-                    elif "tns" in row and row["tns"] != "-1":
+                    elif "tns" in row and row["tns"] not in ("", "-1"):
                         metrics.timing.setup_tns = float(row["tns"])
 
                     # DRC
                     drc_errs = 0
-                    if "tritonRoute_violations" in row and row["tritonRoute_violations"] != "-1":
+                    if "tritonRoute_violations" in row and row["tritonRoute_violations"] not in ("", "-1"):
                         drc_errs += int(float(row["tritonRoute_violations"]))
-                    if "Magic_violations" in row and row["Magic_violations"] != "-1":
+                    if "Magic_violations" in row and row["Magic_violations"] not in ("", "-1"):
                         drc_errs += int(float(row["Magic_violations"]))
                     metrics.drc.total_violations = drc_errs
                     if drc_errs == 0:
@@ -218,25 +233,25 @@ class OpenROADParser(BaseReportParser):
                         metrics.drc.violations_by_layer.clear()
 
                     # Area & Power
-                    if "DIEAREA_mm^2" in row and row["DIEAREA_mm^2"] != "-1":
+                    if "DIEAREA_mm^2" in row and row["DIEAREA_mm^2"] not in ("", "-1"):
                         metrics.area_power.die_area_um2 = float(row["DIEAREA_mm^2"]) * 1e6
-                    if "CoreArea_um^2" in row and row["CoreArea_um^2"] != "-1":
+                    if "CoreArea_um^2" in row and row["CoreArea_um^2"] not in ("", "-1"):
                         metrics.area_power.core_area_um2 = float(row["CoreArea_um^2"])
-                    if "OpenDP_Util" in row and row["OpenDP_Util"] != "-1":
+                    if "OpenDP_Util" in row and row["OpenDP_Util"] not in ("", "-1"):
                         metrics.area_power.utilization_pct = float(row["OpenDP_Util"])
-                    if "TotalCells" in row and row["TotalCells"] != "-1":
+                    if "TotalCells" in row and row["TotalCells"] not in ("", "-1"):
                         metrics.area_power.std_cell_count = int(float(row["TotalCells"]))
 
-                    # Power
-                    if "power_typical_internal_uW" in row and row["power_typical_internal_uW"] != "-1":
+                    # Power (uW -> mW)
+                    if "power_typical_internal_uW" in row and row["power_typical_internal_uW"] not in ("", "-1"):
                         val = float(row["power_typical_internal_uW"])
-                        metrics.area_power.internal_power_mw = val * 1000.0 if val < 1.0 else val / 1000.0
-                    if "power_typical_switching_uW" in row and row["power_typical_switching_uW"] != "-1":
+                        metrics.area_power.internal_power_mw = self._normalize_power_mw(val, "uW")
+                    if "power_typical_switching_uW" in row and row["power_typical_switching_uW"] not in ("", "-1"):
                         val = float(row["power_typical_switching_uW"])
-                        metrics.area_power.switching_power_mw = val * 1000.0 if val < 1.0 else val / 1000.0
-                    if "power_typical_leakage_uW" in row and row["power_typical_leakage_uW"] != "-1":
+                        metrics.area_power.switching_power_mw = self._normalize_power_mw(val, "uW")
+                    if "power_typical_leakage_uW" in row and row["power_typical_leakage_uW"] not in ("", "-1"):
                         val = float(row["power_typical_leakage_uW"])
-                        metrics.area_power.leakage_power_mw = val * 1000.0 if val < 1.0 else val / 1000.0
+                        metrics.area_power.leakage_power_mw = self._normalize_power_mw(val, "uW")
                     metrics.area_power.total_power_mw = (
                         metrics.area_power.internal_power_mw +
                         metrics.area_power.switching_power_mw +

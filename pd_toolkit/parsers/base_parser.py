@@ -20,6 +20,24 @@ class TimingSummary:
     max_cap_violations: int = 0
     max_clock_skew: float = 0.0     # (ns)
 
+    def __post_init__(self):
+        self._setup_wns_set = False
+        self._hold_wns_set = False
+
+    def record_setup_wns(self, val: float) -> None:
+        if not getattr(self, "_setup_wns_set", False):
+            self.setup_wns = val
+            self._setup_wns_set = True
+        else:
+            self.setup_wns = min(self.setup_wns, val)
+
+    def record_hold_wns(self, val: float) -> None:
+        if not getattr(self, "_hold_wns_set", False):
+            self.hold_wns = val
+            self._hold_wns_set = True
+        else:
+            self.hold_wns = min(self.hold_wns, val)
+
     @property
     def setup_passed(self) -> bool:
         return self.setup_wns >= 0.0
